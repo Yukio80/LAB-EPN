@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LAB-EPN + Pangeia</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <script>window.API_URL = 'https://82c40ea075f855d1-187-61-90-143.serveousercontent.com'</script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    .fade-enter-active, .fade-leave-active { transition: opacity .25s ease; }
+    .fade-enter-from, .fade-leave-to { opacity: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading { animation: spin 1s linear infinite; }
+    .card-hover { transition: all .2s ease; }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -8px rgba(0,0,0,.15); }
+    .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
+    .toast-enter-active { animation: slideIn .3s ease; }
+    .toast-leave-active { animation: slideOut .3s ease; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+  <div id="app">
+    <!-- Toast -->
+    <div class="fixed top-4 right-4 z-50 space-y-2">
+      <transition-group name="toast">
+        <div v-for="t in toasts" :key="t.id"
+          class="px-4 py-3 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 min-w-[280px]"
+          :class="t.type === 'success' ? 'bg-emerald-600 text-white' : t.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-800 text-white'">
+          <span v-html="t.icon"></span>
+          <span>{{ t.msg }}</span>
+          <button @click="toasts = toasts.filter(x => x.id !== t.id)" class="ml-auto opacity-70 hover:opacity-100">&times;</button>
+        </div>
+      </transition-group>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="bg-white border-b border-gray-200 sticky top-0 z-40">
+      <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div class="flex items-center gap-3 cursor-pointer" @click="view = 'list'">
+          <img src="icon.svg" class="w-8 h-8" alt="logo">
+          <span class="font-bold text-lg">LAB-EPN</span>
+          <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">Pangeia</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-gray-500 hidden sm:block">{{ propostas.length }} proposta(s)</span>
+          <button @click="view = 'admin'"
+            class="text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 border border-gray-300 hover:bg-gray-50 text-gray-600">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            Admin
+          </button>
+          <button @click="view = 'create'"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Nova Proposta
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-4 py-8">
+      <!-- Loading -->
+      <div v-if="loading" class="flex justify-center py-20">
+        <svg class="w-8 h-8 loading text-indigo-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+      </div>
+
+      <!-- List -->
+      <div v-if="!loading && view === 'list'">
+        <div class="flex items-center justify-between mb-6">
+          <h1 class="text-2xl font-bold">Propostas</h1>
+          <div class="flex gap-2">
+            <select v-model="filtroStatus" class="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white">
+              <option value="">Todos os status</option>
+              <option v-for="s in statusList" :key="s" :value="s">{{ statusLabel(s) }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div v-if="propostasFiltradas.length === 0" class="text-center py-20 text-gray-400">
+          <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          <p class="text-lg">Nenhuma proposta encontrada</p>
+          <p class="text-sm mt-1">Crie a primeira proposta para começar</p>
+        </div>
+
+        <div class="grid gap-4 md:grid-cols-2">
+          <div v-for="p in propostasFiltradas" :key="p.id" @click="verProposta(p)"
+            class="bg-white rounded-xl border border-gray-200 p-5 cursor-pointer card-hover">
+            <div class="flex items-start justify-between gap-3 mb-3">
+              <h3 class="font-semibold text-base leading-tight">{{ p.titulo }}</h3>
+              <span class="badge shrink-0" :class="statusClass(p.status)">{{ statusLabel(p.status) }}</span>
+            </div>
+            <p class="text-sm text-gray-500 line-clamp-2 mb-3">{{ p.resumo }}</p>
+            <div class="flex items-center gap-3 text-xs text-gray-400">
+              <span class="flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                {{ p.localizacao.regiao }}
+              </span>
+              <span class="flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                {{ (p.orcamento_estimado / 1e6).toFixed(1) }}M
+              </span>
+              <span class="ml-auto">{{ formatDate(p.created_at) }}</span>
+            </div>
+            <div v-if="p.ods_vinculados?.length" class="flex gap-1 mt-3 flex-wrap">
+              <span v-for="ods in p.ods_vinculados" :key="ods"
+                class="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold"
+                :style="{ background: odsColor(ods)+'20', color: odsColor(ods) }">ODS{{ ods }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detail -->
+      <div v-if="!loading && view === 'detail' && proposta">
+        <button @click="view = 'list'" class="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mb-4">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          Voltar
+        </button>
+
+        <div class="bg-white rounded-xl border border-gray-200 p-6 md:p-8">
+          <div class="flex items-start justify-between gap-4 mb-4">
+            <h1 class="text-2xl font-bold">{{ proposta.titulo }}</h1>
+            <span class="badge text-sm shrink-0" :class="statusClass(proposta.status)">{{ statusLabel(proposta.status) }}</span>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 text-sm">
+            <div class="bg-gray-50 rounded-lg p-3"><span class="text-gray-400 block text-xs">Região</span>{{ proposta.localizacao.regiao }}</div>
+            <div class="bg-gray-50 rounded-lg p-3"><span class="text-gray-400 block text-xs">Estado</span>{{ proposta.localizacao.estado }}</div>
+            <div class="bg-gray-50 rounded-lg p-3"><span class="text-gray-400 block text-xs">Orçamento</span>{{ (proposta.orcamento_estimado / 1e6).toFixed(2) }}M {{ proposta.moeda }}</div>
+            <div class="bg-gray-50 rounded-lg p-3"><span class="text-gray-400 block text-xs">Autor</span>{{ proposta.organizacao || proposta.autor_id }}</div>
+          </div>
+
+          <div class="space-y-4 mb-6">
+            <div><h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Resumo</h3><p class="text-gray-700">{{ proposta.resumo }}</p></div>
+            <div><h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Problema</h3><p class="text-gray-700">{{ proposta.problema }}</p></div>
+            <div><h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Solução</h3><p class="text-gray-700">{{ proposta.solucao }}</p></div>
+          </div>
+
+          <div v-if="proposta.ods_vinculados?.length" class="flex gap-2 mb-6">
+            <span v-for="ods in proposta.ods_vinculados" :key="ods"
+              class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium"
+              :style="{ background: odsColor(ods)+'20', color: odsColor(ods) }">
+              <span class="font-bold">ODS{{ ods }}</span>
+            </span>
+          </div>
+
+          <!-- Simulação -->
+          <div v-if="proposta.simulacao" class="border-t pt-6 mb-6">
+            <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+              <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              Resultados da Simulação
+              <span class="ml-auto text-xs font-normal bg-gray-100 rounded-full px-3 py-1 text-gray-500">{{ proposta.simulacao.motor_utilizado }}</span>
+              <span v-if="proposta.simulacao.modelo_versao" class="text-xs text-gray-400 bg-gray-50 rounded px-2 py-1">{{ proposta.simulacao.modelo_versao }}</span>
+            </h2>
+
+            <div v-if="proposta.simulacao.contexto_regional" class="grid grid-cols-4 md:grid-cols-6 gap-1.5 mb-4">
+              <div v-for="(val, key) in indicadoresContexto" :key="key"
+                class="bg-gray-50 rounded-lg px-2 py-1.5 text-center text-xs">
+                <span class="text-gray-400 block leading-tight">{{ key }}</span>
+                <span class="font-semibold text-gray-700">{{ val }}</span>
+              </div>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div v-for="(v, k) in proposta.simulacao.metricas" :key="k"
+                class="bg-gray-50 rounded-xl p-4 border" :class="v.delta >= 0 ? 'border-emerald-200' : 'border-red-200'">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-gray-600">{{ labelMetrica(k) }}</span>
+                  <span class="text-lg font-bold" :class="v.delta >= 0 ? 'text-emerald-600' : 'text-red-600'">
+                    {{ v.delta > 0 ? '+' : '' }}{{ (v.delta * 100).toFixed(0) }}%
+                  </span>
+                </div>
+                <div class="flex items-center gap-3 text-xs text-gray-400">
+                  <span>Antes: {{ formatNum(v.antes) }}</span>
+                  <span>Depois: {{ formatNum(v.depois) }}</span>
+                </div>
+                <div class="mt-2 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div class="h-full rounded-full transition-all" :class="v.delta >= 0 ? 'bg-emerald-500' : 'bg-red-500'"
+                    :style="{ width: Math.min(Math.abs(v.delta * 100), 100) + '%' }"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ações -->
+          <div class="border-t pt-6 flex flex-wrap gap-3">
+            <button v-if="proposta.status === 'rascunho' || proposta.status === 'em_validacao'"
+              @click="executarSimulacao" :disabled="acaoLoading"
+              class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+              <svg v-if="acaoLoading" class="w-4 h-4 loading" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Simular no Pangeia
+            </button>
+            <button v-if="proposta.status === 'simulacao_concluida'"
+              @click="executarPublicacao" :disabled="acaoLoading"
+              class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+              <svg v-if="acaoLoading" class="w-4 h-4 loading" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              Publicar para Votação
+            </button>
+            <span v-if="proposta.status === 'em_votacao'"
+              class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Em votação — aguardando contratos
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Create -->
+      <div v-if="!loading && view === 'create'">
+        <button @click="view = 'list'" class="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mb-4">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          Voltar
+        </button>
+
+        <div class="bg-white rounded-xl border border-gray-200 p-6 md:p-8">
+          <h1 class="text-2xl font-bold mb-6">Nova Proposta</h1>
+
+          <form @submit.prevent="criarProposta" class="space-y-5">
+            <div class="grid gap-5 md:grid-cols-2">
+              <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Título</label>
+                <input v-model="form.titulo" required minlength="10" maxlength="200"
+                  class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Resumo</label>
+                <textarea v-model="form.resumo" required minlength="50" rows="2"
+                  class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"></textarea>
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                <textarea v-model="form.descricao" required minlength="100" rows="4"
+                  class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"></textarea>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Problema</label>
+                <textarea v-model="form.problema" required rows="3"
+                  class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"></textarea>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Solução</label>
+                <textarea v-model="form.solucao" required rows="3"
+                  class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"></textarea>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Orçamento Estimado (R$)</label>
+                <input v-model.number="form.orcamento_estimado" required min="1" type="number" step="0.01"
+                  class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Organização</label>
+                <input v-model="form.organizacao"
+                  class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Região</label>
+                <select v-model="form.localizacao.regiao" required
+                  class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white">
+                  <option value="">Selecione</option>
+                  <option>Norte</option><option>Nordeste</option><option>Centro-Oeste</option>
+                  <option>Sudeste</option><option>Sul</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                <input v-model="form.localizacao.estado" required maxlength="2"
+                  class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Bioma</label>
+                <select v-model="form.localizacao.bioma"
+                  class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white">
+                  <option value="">Selecione</option>
+                  <option>Amazônia</option><option>Caatinga</option><option>Cerrado</option>
+                  <option>Mata Atlântica</option><option>Pampa</option><option>Pantanal</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">ODS Vinculados</label>
+                <div class="flex flex-wrap gap-2 mt-1">
+                  <label v-for="n in 17" :key="n" class="flex items-center gap-1.5 text-sm cursor-pointer"
+                    :class="form.ods_vinculados.includes(n) ? 'text-indigo-700 font-medium' : 'text-gray-500'">
+                    <input type="checkbox" :value="n" v-model="form.ods_vinculados" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    {{ n }}
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Tags (separadas por vírgula)</label>
+                <input v-model="tagsInput" placeholder="ex: agua, clima, educacao"
+                  class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              </div>
+            </div>
+
+            <div class="flex gap-3 pt-2">
+              <button type="submit" :disabled="criandoLoading"
+                class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                <svg v-if="criandoLoading" class="w-4 h-4 loading" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                Enviar Proposta
+              </button>
+              <button type="button" @click="view = 'list'"
+                class="px-6 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-800 border border-gray-300 hover:border-gray-400 transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      <!-- Admin / Compliance -->
+      <div v-if="!loading && view === 'admin'">
+        <div class="flex items-center gap-3 mb-6">
+          <h1 class="text-2xl font-bold">Painel de Compliance</h1>
+          <span class="text-xs bg-gray-100 rounded-full px-3 py-1 text-gray-500">{{ adminDashboard.pesos_ods_versao || '-' }}</span>
+        </div>
+
+        <div class="flex gap-2 mb-6 flex-wrap">
+          <button v-for="tab in adminTabs" :key="tab.id"
+            @click="adminTab = tab.id"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            :class="adminTab === tab.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">
+            {{ tab.label }}
+          </button>
+        </div>
+
+        <!-- Tab: Dashboard -->
+        <div v-if="adminTab === 'dashboard'" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+          <div class="bg-white rounded-xl border p-5"><span class="text-gray-400 text-xs block">Total Propostas</span><span class="text-2xl font-bold">{{ adminDashboard.total_propostas || 0 }}</span></div>
+          <div class="bg-white rounded-xl border p-5"><span class="text-gray-400 text-xs block">Em Simulação</span><span class="text-2xl font-bold">{{ adminDashboard.por_status?.em_simulacao || 0 }}</span></div>
+          <div class="bg-white rounded-xl border p-5"><span class="text-gray-400 text-xs block">Simuladas</span><span class="text-2xl font-bold">{{ adminDashboard.simuladas || 0 }}</span></div>
+          <div class="bg-white rounded-xl border p-5"><span class="text-gray-400 text-xs block">Em Votação</span><span class="text-2xl font-bold">{{ adminDashboard.em_votacao || 0 }}</span></div>
+        </div>
+
+        <!-- Tab: Pesos ODS -->
+        <div v-if="adminTab === 'pesos'">
+          <div class="flex items-center justify-between mb-4">
+            <p class="text-sm text-gray-500">Tabela versionada de pesos dos ODS. Cada coeficiente modula o impacto nas 5 métricas da simulação.</p>
+            <span class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">v{{ adminPesos.versao }}</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-gray-50 border-b">
+                  <th class="text-left p-2 font-medium">ODS</th>
+                  <th class="text-left p-2 font-medium">Nome</th>
+                  <th class="text-center p-2 font-medium">Desig.</th>
+                  <th class="text-center p-2 font-medium">Empr.</th>
+                  <th class="text-center p-2 font-medium">Conf.</th>
+                  <th class="text-center p-2 font-medium">Confl.</th>
+                  <th class="text-center p-2 font-medium">PIB</th>
+                  <th class="text-left p-2 font-medium">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="ods in adminPesos.ods" :key="ods.ods_id" class="border-b hover:bg-gray-50">
+                  <td class="p-2 font-bold" :style="{color: odsColor(ods.ods_id)}">ODS{{ ods.ods_id }}</td>
+                  <td class="p-2 text-gray-600 max-w-[200px] truncate" :title="ods.nome">{{ ods.nome }}</td>
+                  <td class="p-2 text-center" :class="ods.pesos.desigualdade < 0 ? 'text-emerald-600' : ''">{{ (ods.pesos.desigualdade * 100).toFixed(1) }}%</td>
+                  <td class="p-2 text-center" :class="ods.pesos.emprego > 0 ? 'text-emerald-600' : ''">{{ (ods.pesos.emprego * 100).toFixed(1) }}%</td>
+                  <td class="p-2 text-center" :class="ods.pesos.confianca > 0 ? 'text-emerald-600' : ''">{{ (ods.pesos.confianca * 100).toFixed(1) }}%</td>
+                  <td class="p-2 text-center" :class="ods.pesos.conflito < 0 ? 'text-emerald-600' : ''">{{ (ods.pesos.conflito * 100).toFixed(1) }}%</td>
+                  <td class="p-2 text-center" :class="ods.pesos.pib > 0 ? 'text-emerald-600' : ''">{{ (ods.pesos.pib * 100).toFixed(1) }}%</td>
+                  <td class="p-2">
+                    <button @click="editarPeso(ods)" class="text-indigo-600 hover:text-indigo-800 text-xs">Editar</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Modal editar peso -->
+          <div v-if="pesoEditando" class="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" @click.self="pesoEditando = null">
+            <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+              <h3 class="font-bold mb-1">ODS{{ pesoEditando.ods_id }} — {{ pesoEditando.nome }}</h3>
+              <p class="text-xs text-gray-400 mb-4">{{ pesoEditando.meta_resumo }}</p>
+              <div class="grid grid-cols-2 gap-3 mb-4">
+                <div v-for="(v,k) in pesoEditando.pesos" :key="k" v-if="!['sinergia_titulo','sinergia_contexto'].includes(k)">
+                  <label class="text-xs text-gray-500 block mb-0.5">{{ k }}</label>
+                  <input v-model.number="pesoEditForm[k]" type="number" step="0.01" class="w-full border rounded px-2 py-1.5 text-sm">
+                </div>
+              </div>
+              <div class="mb-4">
+                <label class="text-xs text-gray-500 block mb-0.5">Justificativa da alteração</label>
+                <textarea v-model="pesoJustificativa" rows="2" class="w-full border rounded px-3 py-2 text-sm" placeholder="Por que este peso foi alterado?"></textarea>
+              </div>
+              <div class="flex gap-2 justify-end">
+                <button @click="pesoEditando = null" class="px-4 py-2 text-sm border rounded-lg">Cancelar</button>
+                <button @click="salvarPeso" :disabled="adminLoading" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg disabled:opacity-50">Salvar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Revisão -->
+        <div v-if="adminTab === 'revisao'">
+          <p class="text-sm text-gray-500 mb-4">Propostas pendentes de validação do Comitê.</p>
+          <div v-if="adminPendentes.length === 0" class="text-center py-10 text-gray-400">
+            <p>Nenhuma proposta pendente</p>
+          </div>
+          <div v-for="p in adminPendentes" :key="p.id" class="bg-white rounded-xl border p-4 mb-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h3 class="font-semibold">{{ p.titulo }}</h3>
+                <p class="text-sm text-gray-500 mt-0.5">{{ p.resumo?.slice(0,100) }}...</p>
+              </div>
+              <span class="badge shrink-0" :class="statusClass(p.status)">{{ statusLabel(p.status) }}</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 mt-3 text-xs text-gray-400">
+              <span>{{ p.localizacao?.regiao }} / {{ p.localizacao?.estado }}</span>
+              <span>R$ {{ (p.orcamento_estimado/1e6).toFixed(0) }}M</span>
+              <span v-if="p.motor_utilizado">Motor: {{ p.motor_utilizado }}</span>
+              <span v-if="p.modelo_versao">v{{ p.modelo_versao }}</span>
+              <span>{{ p.ods_vinculados?.length }} ODS</span>
+            </div>
+            <div v-if="p.metricas && Object.keys(p.metricas).length" class="flex gap-3 mt-2 text-xs">
+              <span v-for="(v,k) in p.metricas" :key="k"
+                class="px-2 py-0.5 rounded" :class="v.delta >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'">
+                {{ labelMetrica(k) }}: {{ (v.delta*100).toFixed(0) }}%
+              </span>
+            </div>
+            <div class="flex gap-2 mt-3">
+              <button @click="validarProposta(p.id, 'aprovar')" :disabled="adminLoading"
+                class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs font-medium">Aprovar</button>
+              <button @click="validarProposta(p.id, 'rejeitar')" :disabled="adminLoading"
+                class="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs font-medium">Rejeitar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Votações -->
+        <div v-if="adminTab === 'votacoes'">
+          <p class="text-sm text-gray-500 mb-4">Propostas atualmente em votação.</p>
+          <div v-if="adminVotacoes.length === 0" class="text-center py-10 text-gray-400">
+            <p>Nenhuma votação ativa</p>
+          </div>
+          <div v-for="v in adminVotacoes" :key="v.id" class="bg-white rounded-xl border p-4 mb-3">
+            <h3 class="font-semibold">{{ v.titulo }}</h3>
+            <div class="flex gap-4 mt-2 text-xs text-gray-500">
+              <span>{{ v.organizacao || 'Autor anônimo' }}</span>
+              <span>Orçamento: R$ {{ (v.orcamento_estimado/1e6).toFixed(0) }}M</span>
+              <span>Publicado: {{ formatDate(v.published_at) }}</span>
+            </div>
+            <div v-if="v.metricas" class="flex gap-2 mt-2 flex-wrap">
+              <span v-for="(m,k) in v.metricas" :key="k" class="text-xs px-2 py-0.5 rounded bg-gray-100">
+                {{ labelMetrica(k) }}: {{ (m.delta*100).toFixed(0) }}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Auditoria -->
+        <div v-if="adminTab === 'auditoria'">
+          <p class="text-sm text-gray-500 mb-4">Registro de alterações no sistema.</p>
+          <div v-if="adminAuditoria.length === 0" class="text-center py-10 text-gray-400">
+            <p>Nenhum registro de auditoria</p>
+          </div>
+          <div class="space-y-2">
+            <div v-for="(a, i) in adminAuditoria" :key="i" class="bg-white rounded-lg border p-3 text-sm">
+              <div class="flex items-center gap-2 text-xs">
+                <span class="font-mono text-gray-400">{{ a.timestamp?.slice(0,19)?.replace('T',' ') }}</span>
+                <span class="px-1.5 py-0.5 rounded text-xs font-medium"
+                  :class="a.acao?.includes('aprovar') ? 'bg-emerald-100 text-emerald-700' : a.acao?.includes('atualizacao') ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'">
+                  {{ a.acao }}
+                </span>
+                <span class="text-gray-400">{{ a.usuario }}</span>
+              </div>
+              <p class="mt-1 text-gray-600">{{ a.descricao }}</p>
+              <div v-if="a.dados_anteriores || a.dados_novos" class="mt-1 text-xs text-gray-400">
+                <span v-if="a.dados_anteriores">Antes: {{ JSON.stringify(a.dados_anteriores) }}</span>
+                <span v-if="a.dados_novos" class="ml-2">Depois: {{ JSON.stringify(a.dados_novos) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="border-t border-gray-200 py-6 mt-12">
+      <div class="max-w-6xl mx-auto px-4 text-center text-sm text-gray-400">
+        LAB-EPN + Pangeia — Simulador de Políticas Públicas
+      </div>
+    </footer>
+  </div>
+
+  <script type="module">
+    import api from './api.js'
+
+    const { createApp, ref, computed, watch, onMounted, nextTick } = Vue
+
+    createApp({
+      setup() {
+        const view = ref('list')
+        const loading = ref(false)
+        const acaoLoading = ref(false)
+        const criandoLoading = ref(false)
+        const propostas = ref([])
+        const proposta = ref(null)
+        const filtroStatus = ref('')
+        const toasts = ref([])
+        const tagsInput = ref('')
+
+        const adminTab = ref('dashboard')
+        const adminLoading = ref(false)
+        const adminDashboard = ref({})
+        const adminPesos = ref({ods:[]})
+        const adminPendentes = ref([])
+        const adminVotacoes = ref([])
+        const adminAuditoria = ref([])
+        const pesoEditando = ref(null)
+        const pesoEditForm = ref({})
+        const pesoJustificativa = ref('')
+        const adminTabs = [
+          {id:'dashboard', label:'📊 Painel'},
+          {id:'pesos', label:'⚖️ Pesos ODS'},
+          {id:'revisao', label:'🔍 Revisão'},
+          {id:'votacoes', label:'🗳️ Votações'},
+          {id:'auditoria', label:'📋 Auditoria'},
+        ]
+
+        const form = ref({
+          titulo: '', resumo: '', descricao: '', problema: '', solucao: '',
+          orcamento_estimado: null, autor_id: 'cidadao-' + Date.now(),
+          autor_tipo: 'cidadao', organizacao: '',
+          localizacao: { regiao: '', estado: '', municipio: '', bioma: '' },
+          ods_vinculados: [], tags: []
+        })
+
+        const statusList = ['rascunho','em_validacao','em_simulacao','simulacao_concluida','em_votacao','aprovada','rejeitada','em_execucao','concluida']
+
+        function statusLabel(s) {
+          const m = {
+            rascunho: 'Rascunho', em_validacao: 'Validando', em_simulacao: 'Simulando',
+            simulacao_concluida: 'Simulado', em_votacao: 'Em Votação',
+            aprovada: 'Aprovada', rejeitada: 'Rejeitada',
+            em_execucao: 'Em Execução', concluida: 'Concluída', arquivada: 'Arquivada'
+          }
+          return m[s] || s
+        }
+
+        function statusClass(s) {
+          const m = {
+            rascunho: 'bg-gray-100 text-gray-700',
+            em_validacao: 'bg-blue-100 text-blue-700',
+            em_simulacao: 'bg-purple-100 text-purple-700',
+            simulacao_concluida: 'bg-teal-100 text-teal-700',
+            em_votacao: 'bg-amber-100 text-amber-700',
+            aprovada: 'bg-emerald-100 text-emerald-700',
+            rejeitada: 'bg-red-100 text-red-700',
+            em_execucao: 'bg-cyan-100 text-cyan-700',
+            concluida: 'bg-green-100 text-green-700',
+            arquivada: 'bg-gray-100 text-gray-500'
+          }
+          return m[s] || 'bg-gray-100 text-gray-700'
+        }
+
+        const indicadoresContexto = computed(() => {
+          const ctx = proposta.value?.simulacao?.contexto_regional
+          if (!ctx) return {}
+          return {
+            'UF': ctx.uf || '-',
+            'IDH': ctx.idh?.toFixed(3) || ctx.idh_medio?.toFixed(3) || '-',
+            'GINI': ctx.gini?.toFixed(2) || '-',
+            'População': ctx.populacao ? (ctx.populacao/1e6).toFixed(1)+'M' : '-',
+            'Escolaridade': ctx.escolaridade ? ctx.escolaridade+' anos' : '-',
+            'Estresse Hídrico': ctx.estresse_hidrico ? (ctx.estresse_hidrico*100).toFixed(0)+'%' : '-',
+            'Cobertura Vegetal': ctx.cobertura_vegetal_pct ? ctx.cobertura_vegetal_pct+'%' : '-',
+            'Risco Incêndio': ctx.risco_incendio ? (ctx.risco_incendio*100).toFixed(0)+'%' : '-',
+            'Desmatamento': ctx.desmatamento_anual_km2 ? ctx.desmatamento_anual_km2.toFixed(0)+' km²/ano' : '-',
+          }
+        })
+
+        function formatNum(n) {
+          if (typeof n === 'number' && n > 100) return n.toLocaleString('pt-BR', {maximumFractionDigits:0})
+          if (typeof n === 'number') return n.toFixed(2)
+          return n
+        }
+
+        function labelMetrica(k) {
+          const m = {
+            indice_desigualdade: 'Desigualdade',
+            indice_confianca_social: 'Confiança Social',
+            probabilidade_conflito_agua: 'Conflito por Água',
+            emprego_local: 'Emprego Local',
+            pib_per_capita: 'PIB per capita',
+            probabilidade_conflito: 'Conflito Geral'
+          }
+          return m[k] || k
+        }
+
+        function odsColor(n) {
+          const cores = ['','e5243b','dda63a','4c9f38','c5192d','ff3a21','26bde2','fcc30b','a21942','fd6925','dd1367','fd9d24','bf8b2e','3f7e44','0a97d4','56c02b','00689d','19486a']
+          return '#' + (cores[n] || '6366f1')
+        }
+
+        function formatDate(d) {
+          return new Date(d + 'Z').toLocaleDateString('pt-BR')
+        }
+
+        function toast(msg, type = 'info') {
+          const icons = { success: '&#10003;', error: '&#10007;', info: '&#9432;' }
+          toasts.value.push({ id: Date.now(), msg, type, icon: icons[type] })
+          setTimeout(() => { toasts.value.shift() }, 4000)
+        }
+
+        const propostasFiltradas = computed(() => {
+          if (!filtroStatus.value) return propostas.value
+          return propostas.value.filter(p => p.status === filtroStatus.value)
+        })
+
+        async function carregar() {
+          loading.value = true
+          try {
+            propostas.value = await api.listar()
+          } catch (e) { toast(e.message, 'error') }
+          finally { loading.value = false }
+        }
+
+        async function verProposta(p) {
+          loading.value = true
+          view.value = 'detail'
+          try {
+            proposta.value = await api.obter(p.id)
+          } catch (e) { toast(e.message, 'error'); view.value = 'list' }
+          finally { loading.value = false }
+        }
+
+        async function criarProposta() {
+          criandoLoading.value = true
+          form.value.tags = tagsInput.value.split(',').map(t => t.trim()).filter(Boolean)
+          form.value.autor_id = 'cidadao-' + Date.now()
+          try {
+            const p = await api.criar({ ...form.value })
+            propostas.value.push(p)
+            toast('Proposta criada com sucesso!', 'success')
+            view.value = 'list'
+            form.value = {
+              titulo: '', resumo: '', descricao: '', problema: '', solucao: '',
+              orcamento_estimado: null, autor_id: '', autor_tipo: 'cidadao', organizacao: '',
+              localizacao: { regiao: '', estado: '', municipio: '', bioma: '' },
+              ods_vinculados: [], tags: []
+            }
+            tagsInput.value = ''
+          } catch (e) { toast(e.message, 'error') }
+          finally { criandoLoading.value = false }
+        }
+
+        async function executarSimulacao() {
+          acaoLoading.value = true
+          try {
+            proposta.value = await api.simular(proposta.value.id)
+            const idx = propostas.value.findIndex(p => p.id === proposta.value.id)
+            if (idx >= 0) propostas.value[idx] = { ...proposta.value }
+            toast('Simulação concluída! Veja os resultados.', 'success')
+          } catch (e) { toast(e.message, 'error') }
+          finally { acaoLoading.value = false }
+        }
+
+        async function carregarAdmin() {
+          adminLoading.value = true
+          try {
+            const [dash, pesos, pendentes, votacoes, auditoria] = await Promise.all([
+              api.admin.dashboard(),
+              api.admin.pesos(),
+              api.admin.pendentes(),
+              api.admin.votacoes(),
+              api.admin.auditoria(),
+            ])
+            adminDashboard.value = dash
+            adminPesos.value = pesos
+            adminPendentes.value = pendentes
+            adminVotacoes.value = votacoes
+            adminAuditoria.value = auditoria
+          } catch (e) { toast(e.message, 'error') }
+          finally { adminLoading.value = false }
+        }
+
+        async function editarPeso(ods) {
+          pesoEditando.value = ods
+          pesoEditForm.value = { ...ods.pesos }
+          pesoJustificativa.value = ''
+        }
+
+        async function salvarPeso() {
+          adminLoading.value = true
+          try {
+            const r = await api.admin.atualizarPesos(pesoEditando.value.ods_id, pesoEditForm.value, pesoJustificativa.value)
+            adminPesos.value = r
+            pesoEditando.value = null
+            toast('Peso atualizado! Registro em auditoria.', 'success')
+          } catch (e) { toast(e.message, 'error') }
+          finally { adminLoading.value = false }
+        }
+
+        async function validarProposta(id, decisao) {
+          adminLoading.value = true
+          try {
+            await api.admin.validar(id, decisao, '')
+            toast(`Proposta ${decisao === 'aprovar' ? 'aprovada' : 'rejeitada'}!`, 'success')
+            adminPendentes.value = await api.admin.pendentes()
+          } catch (e) { toast(e.message, 'error') }
+          finally { adminLoading.value = false }
+        }
+
+        async function executarPublicacao() {
+          acaoLoading.value = true
+          try {
+            proposta.value = await api.publicar(proposta.value.id)
+            const idx = propostas.value.findIndex(p => p.id === proposta.value.id)
+            if (idx >= 0) propostas.value[idx] = { ...proposta.value }
+            toast('Proposta publicada para votação!', 'success')
+          } catch (e) { toast(e.message, 'error') }
+          finally { acaoLoading.value = false }
+        }
+
+        onMounted(carregar)
+
+        watch(view, (v) => { if (v === 'admin') carregarAdmin() })
+
+        return {
+          view, loading, acaoLoading, criandoLoading,
+          propostas, proposta, filtroStatus, toasts, form, tagsInput,
+          statusList, statusLabel, statusClass, labelMetrica, odsColor, formatDate, formatNum,
+          propostasFiltradas, indicadoresContexto, verProposta, criarProposta, executarSimulacao, executarPublicacao,
+          adminTab, adminLoading, adminDashboard, adminPesos, adminPendentes, adminVotacoes,
+          adminAuditoria, adminTabs, pesoEditando, pesoEditForm, pesoJustificativa,
+          carregarAdmin, editarPeso, salvarPeso, validarProposta,
+        }
+      }
+    }).mount('#app')
+  </script>
+</body>
+</html>

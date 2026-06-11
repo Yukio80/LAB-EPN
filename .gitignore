@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+lab-epn.db
+.env
+.envrc
+/tmp/chamada_pangeia.json
+.DS_Store
+*.db
