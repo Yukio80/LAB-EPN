@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.database import Base, engine
 from app.routes.propostas import router as propostas_router
 from app.routes.admin import router as admin_router
+from app.routes.votacao import router as votacao_router
 
 
 @asynccontextmanager
@@ -36,6 +37,7 @@ def health():
 
 app.include_router(propostas_router)
 app.include_router(admin_router)
+app.include_router(votacao_router)
 
 frontend_path = Path(__file__).resolve().parent.parent / "frontend"
 if frontend_path.exists():

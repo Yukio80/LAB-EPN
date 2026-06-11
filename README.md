@@ -88,6 +88,22 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | POST | `/admin/propostas/{id}/validar` | Aprova ou rejeita proposta |
 | GET | `/admin/votacoes` | Votações ativas |
 
+### Votação On-chain
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | `/votacao/propostas` | Lista votações ativas |
+| POST | `/votacao/propostas/{id}/votar` | Votar (voto + créditos) |
+| GET | `/votacao/propostas/{id}/resultado` | Resultado parcial da votação |
+
+### Resolução Geográfica
+O campo `_resolucao_geografica` no contexto de simulação informa a precisão dos dados utilizados:
+
+| Valor | Significado | UI |
+|---|---|---|
+| `municipal` | Dados do município (catastrado) | ✅ Verde |
+| `uf_fallback` | Município não catalogado → dados da UF | ⚠️ Amarelo |
+| `uf` | Nível UF (sem município informado) | ℹ️ Cinza |
+
 ## Modelo de Simulação v1.1
 
 ### Escala de orçamento
@@ -110,6 +126,57 @@ Composição documentada e retornada no campo `_composicao_vulnerabilidade` do c
 - **6 biomas**: área, desmatamento anual, estoque de carbono, estresse hídrico, biodiversidade, risco de incêndio, cobertura vegetal, % agropecuária
 - **15 municípios catalogados**: com indicadores próprios (fallback para UF)
 - **IBGE Localidades (live)**: regiões, estados, municípios via API
+
+## Produção
+
+### PostgreSQL (substituir SQLite)
+
+SQLite é adequado para desenvolvimento local. Para produção com múltiplos usuários concorrentes:
+
+```bash
+# 1. Instalar dependência do PostgreSQL
+pip install psycopg2-binary
+
+# 2. Criar banco no PostgreSQL
+createdb lab_epn
+
+# 3. Alterar DATABASE_URL em app/database.py:
+#    De: sqlite:///./lab-epn.db
+#    Para: postgresql://user:password@localhost:5432/lab_epn
+```
+
+Nenhuma outra alteração no código é necessária — SQLAlchemy abstrai a diferença.
+
+### Deploy sem serveo.net
+
+Para ambientes que exigem disponibilidade e HTTPS:
+
+```yaml
+# Opção 1: Render (recomendado para piloto)
+#   - Conecta repo GitHub
+#   - Define start command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+#   - PostgreSQL como add-on
+
+# Opção 2: Railway
+#   - Similar ao Render, com $PORT automático
+#   - PostgreSQL nativo
+
+# Opção 3: VPS próprio (Nginx + Systemd)
+#   - systemd service para uvicorn
+#   - Nginx reverse proxy com certbot/SSL
+#   - PostgreSQL via docker ou nativo
+```
+
+### Contrato Solidity (produção)
+
+O `QuadraticVote.sol` em `contratos/` pode ser implantado via:
+
+```bash
+# Hardhat ou Foundry
+npx hardhat run scripts/deploy.js --network sepolia
+```
+
+Após deploy, configurar `CONTRATO_ENDERECO` e `WEB3_PROVIDER` no ambiente para que `app/services/votacao_onchain.py` use o contrato real em vez do simulador em memória.
 
 ## Variáveis de Ambiente
 

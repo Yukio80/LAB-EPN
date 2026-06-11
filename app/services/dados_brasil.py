@@ -262,12 +262,21 @@ def indicadores_compostos(uf_sigla: str, bioma: str, municipio: str = "") -> dic
     uf = dados_uf(uf_sigla)
     bm = BIOMAS.get(bioma, {})
 
-    # Tenta usar dados municipais se disponíveis
+    # Resolução geográfica: municipal, uf_fallback ou uf
     mun = dados_municipio(uf_sigla, municipio)
-    idh = mun.get("idh") or uf.get("idh", 0.7)
-    gini = mun.get("gini") or uf.get("gini", 0.55)
-    populacao = mun.get("populacao") or uf.get("populacao", 0)
-    pib_pc = mun.get("pib_per_capita") or uf.get("pib_per_capita", 20000)
+    tem_municipio = bool(municipio)
+    dados_sao_municipais = bool(mun)
+    if tem_municipio and dados_sao_municipais:
+        resolucao = "municipal"
+    elif tem_municipio and not dados_sao_municipais:
+        resolucao = "uf_fallback"
+    else:
+        resolucao = "uf"
+
+    idh = mun.get("idh") if dados_sao_municipais else uf.get("idh", 0.7)
+    gini = mun.get("gini") if dados_sao_municipais else uf.get("gini", 0.55)
+    populacao = mun.get("populacao") if dados_sao_municipais else uf.get("populacao", 0)
+    pib_pc = mun.get("pib_per_capita") if dados_sao_municipais else uf.get("pib_per_capita", 20000)
     escolaridade = uf.get("escolaridade", 7.0)
     expectativa_vida = uf.get("expectativa_vida", 74.0)
     area_uf_km2 = uf.get("area_km2", 0)
@@ -279,6 +288,7 @@ def indicadores_compostos(uf_sigla: str, bioma: str, municipio: str = "") -> dic
     vulnerabilidade = round(v_idh + v_gini + v_esc, 3)
 
     return {
+        "_resolucao_geografica": resolucao,
         "idh": idh,
         "pib_per_capita": pib_pc,
         "populacao": populacao,
@@ -316,4 +326,5 @@ async def enriquecer_localizacao(localizacao: dict) -> dict:
         comp = indicadores_compostos(uf, bioma, municipio)
         base["indicadores_compostos"] = comp
         base["_composicao_vulnerabilidade"] = comp.get("_composicao_vulnerabilidade", {})
+        base["_resolucao_geografica"] = comp.get("_resolucao_geografica", "uf")
     return base

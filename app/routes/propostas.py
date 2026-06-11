@@ -11,6 +11,7 @@ from app.models.proposta import (
     PropostaStatus,
 )
 from app.services.simulacao import SimulacaoRequest, chamar_motor_pangeia
+from app.services.votacao_onchain import implantar
 from uuid import uuid4
 
 router = APIRouter(prefix="/propostas", tags=["propostas"])
@@ -107,7 +108,7 @@ async def simular_proposta(proposta_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{proposta_id}/publicar", response_model=PropostaResponse)
-def publicar_proposta(proposta_id: str, db: Session = Depends(get_db)):
+async def publicar_proposta(proposta_id: str, db: Session = Depends(get_db)):
     orm = db.query(PropostaORM).filter(PropostaORM.id == proposta_id).first()
     if not orm:
         raise HTTPException(status_code=404, detail="Proposta nao encontrada")
@@ -120,6 +121,16 @@ def publicar_proposta(proposta_id: str, db: Session = Depends(get_db)):
     orm.status = PropostaStatus.em_votacao.value
     orm.published_at = now
     orm.updated_at = now
+
+    contrato = await implantar(
+        titulo=orm.titulo,
+        descricao=orm.descricao,
+        orcamento=orm.orcamento_estimado,
+    )
+    orm.contrato_endereco = contrato["contrato_endereco"]
+    if orm.simulacao:
+        orm.simulacao["contrato"] = contrato
+
     db.commit()
     db.refresh(orm)
     return PropostaResponse.from_orm(orm)

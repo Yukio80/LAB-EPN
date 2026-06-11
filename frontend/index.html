@@ -159,6 +159,15 @@
             </h2>
 
             <div v-if="proposta.simulacao.contexto_regional" class="grid grid-cols-4 md:grid-cols-6 gap-1.5 mb-4">
+              <div class="bg-gray-50 rounded-lg px-2 py-1.5 text-center text-xs col-span-2" v-if="proposta.simulacao.contexto_regional._resolucao_geografica">
+                <span class="text-gray-400 block leading-tight">Resolução</span>
+                <span class="font-semibold inline-flex items-center gap-1"
+                  :class="proposta.simulacao.contexto_regional._resolucao_geografica === 'municipal' ? 'text-emerald-600' : 'text-amber-600'">
+                  <span v-if="proposta.simulacao.contexto_regional._resolucao_geografica === 'municipal'">&#10003;</span>
+                  <span v-else>&#9888;</span>
+                  {{ resolucaoLabel(proposta.simulacao.contexto_regional._resolucao_geografica) }}
+                </span>
+              </div>
               <div v-for="(val, key) in indicadoresContexto" :key="key"
                 class="bg-gray-50 rounded-lg px-2 py-1.5 text-center text-xs">
                 <span class="text-gray-400 block leading-tight">{{ key }}</span>
@@ -187,6 +196,38 @@
             </div>
           </div>
 
+          <!-- Votação On-chain -->
+          <div v-if="proposta.status === 'em_votacao' && proposta.contrato_endereco"
+            class="border-t pt-6 mb-6">
+            <h3 class="font-bold mb-3 flex items-center gap-2">
+              <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Votação On-chain
+              <span class="text-xs font-mono text-gray-400 font-normal">contrato: {{ proposta.contrato_endereco.slice(0,14) }}...</span>
+            </h3>
+            <div class="flex items-end gap-3 mb-3">
+              <div>
+                <label class="text-xs text-gray-500 block mb-0.5">Créditos (custo = n² × 0.001 ETH)</label>
+                <input v-model.number="votoCreditos" type="number" min="1" max="100" class="w-24 border rounded px-2 py-1.5 text-sm">
+              </div>
+              <span class="text-xs text-gray-400 mb-1">custo: {{ (votoCreditos * votoCreditos * 0.001).toFixed(4) }} ETH</span>
+            </div>
+            <div class="flex gap-2">
+              <button @click="castVoto(true)" :disabled="votoLoading"
+                class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-1">
+                <svg v-if="votoLoading" class="w-4 h-4 loading" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                Votar Sim
+              </button>
+              <button @click="castVoto(false)" :disabled="votoLoading"
+                class="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-1">
+                Votar Não
+              </button>
+            </div>
+            <div v-if="votoResultado" class="mt-3 text-xs bg-gray-50 rounded-lg p-3">
+              <p>Voto registrado: <strong>{{ votoResultado.voto ? 'Sim' : 'Não' }}</strong> com {{ votoResultado.creditos }} crédito(s)</p>
+              <p>Custo: {{ votoResultado.custo_eth }} ETH | Total Sim: {{ votoResultado.total_creditos_sim }} | Total Não: {{ votoResultado.total_creditos_nao }}</p>
+            </div>
+          </div>
+
           <!-- Ações -->
           <div class="border-t pt-6 flex flex-wrap gap-3">
             <button v-if="proposta.status === 'rascunho' || proposta.status === 'em_validacao'"
@@ -203,7 +244,7 @@
               <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
               Publicar para Votação
             </button>
-            <span v-if="proposta.status === 'em_votacao'"
+            <span v-if="proposta.status === 'em_votacao' && !proposta.contrato_endereco"
               class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               Em votação — aguardando contratos
@@ -503,6 +544,9 @@
         const filtroStatus = ref('')
         const toasts = ref([])
         const tagsInput = ref('')
+        const votoCreditos = ref(1)
+        const votoLoading = ref(false)
+        const votoResultado = ref(null)
 
         const adminTab = ref('dashboard')
         const adminLoading = ref(false)
@@ -573,6 +617,10 @@
             'Desmatamento': ctx.desmatamento_anual_km2 ? ctx.desmatamento_anual_km2.toFixed(0)+' km²/ano' : '-',
           }
         })
+
+        function resolucaoLabel(r) {
+          return {'municipal': 'Dados Municipais', 'uf_fallback': 'Fallback UF (município não catalogado)', 'uf': 'Dados da UF'}[r] || r
+        }
 
         function formatNum(n) {
           if (typeof n === 'number' && n > 100) return n.toLocaleString('pt-BR', {maximumFractionDigits:0})
@@ -649,6 +697,16 @@
           finally { criandoLoading.value = false }
         }
 
+        async function castVoto(voto) {
+          votoLoading.value = true
+          votoResultado.value = null
+          try {
+            votoResultado.value = await api.votacao.votar(proposta.value.id, voto, votoCreditos.value)
+            toast('Voto registrado on-chain!', 'success')
+          } catch (e) { toast(e.message, 'error') }
+          finally { votoLoading.value = false }
+        }
+
         async function executarSimulacao() {
           acaoLoading.value = true
           try {
@@ -709,10 +767,11 @@
         async function executarPublicacao() {
           acaoLoading.value = true
           try {
-            proposta.value = await api.publicar(proposta.value.id)
+            const r = await api.publicar(proposta.value.id)
+            proposta.value = r
             const idx = propostas.value.findIndex(p => p.id === proposta.value.id)
-            if (idx >= 0) propostas.value[idx] = { ...proposta.value }
-            toast('Proposta publicada para votação!', 'success')
+            if (idx >= 0) propostas.value[idx] = { ...r }
+            toast('Proposta publicada para votação! Contrato gerado: ' + (r.contrato_endereco || '').slice(0, 14) + '...', 'success')
           } catch (e) { toast(e.message, 'error') }
           finally { acaoLoading.value = false }
         }
@@ -722,13 +781,13 @@
         watch(view, (v) => { if (v === 'admin') carregarAdmin() })
 
         return {
-          view, loading, acaoLoading, criandoLoading,
+          view, loading, acaoLoading, criandoLoading, votoCreditos, votoLoading, votoResultado,
           propostas, proposta, filtroStatus, toasts, form, tagsInput,
-          statusList, statusLabel, statusClass, labelMetrica, odsColor, formatDate, formatNum,
+          statusList, statusLabel, statusClass, labelMetrica, odsColor, formatDate, formatNum, resolucaoLabel,
           propostasFiltradas, indicadoresContexto, verProposta, criarProposta, executarSimulacao, executarPublicacao,
           adminTab, adminLoading, adminDashboard, adminPesos, adminPendentes, adminVotacoes,
           adminAuditoria, adminTabs, pesoEditando, pesoEditForm, pesoJustificativa,
-          carregarAdmin, editarPeso, salvarPeso, validarProposta,
+          carregarAdmin, editarPeso, salvarPeso, validarProposta, castVoto,
         }
       }
     }).mount('#app')

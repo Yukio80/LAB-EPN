@@ -7,6 +7,12 @@ export default {
   simular: (id) => fetch(API + `/propostas/${id}/simular`, { method:'POST' }).then(r => { if(!r.ok) throw r; return r.json() }),
   publicar: (id) => fetch(API + `/propostas/${id}/publicar`, { method:'POST' }).then(r => { if(!r.ok) throw r; return r.json() }),
 
+  votacao: {
+    listar: () => fetch(API + '/votacao/propostas').then(r => r.json()),
+    votar: (id, voto, creditos) => fetch(API + `/votacao/propostas/${id}/votar?voto=${voto}&creditos=${creditos}`, { method:'POST' }).then(r => { if(!r.ok) throw r; return r.json() }),
+    resultado: (id) => fetch(API + `/votacao/propostas/${id}/resultado`).then(r => r.json()),
+  },
+
   admin: {
     dashboard: () => fetch(API + '/admin/dashboard').then(r => r.json()),
     pesos: () => fetch(API + '/admin/pesos').then(r => r.json()),
