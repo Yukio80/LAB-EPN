@@ -1,8 +1,10 @@
 # LAB-EPN + Pangeia
 
-**Demo online:** [https://anyclaw.store/claim/2j1xs0](https://anyclaw.store/claim/2j1xs0)
+**Demo online:** [https://lab-epn-pangeia.anyclaw.store](https://lab-epn-pangeia.anyclaw.store)
 
-> **Nota:** O backend esta rodando em tunnel temporario com alta latencia. Para uso real, faca deploy no Railway (instrucoes abaixo).
+**Backend (API + Swagger):** [https://lab-epn-production.up.railway.app](https://lab-epn-production.up.railway.app) · [`/docs`](https://lab-epn-production.up.railway.app/docs)
+
+**Anyclaw Store:** [https://anyclaw.store/pixelotter-8/lab-epn-pangeia](https://anyclaw.store/pixelotter-8/lab-epn-pangeia)
 
 Acesse, veja 5 propostas pre-carregadas com simulacao, e vote nas 2 em votacao on-chain.
 
@@ -34,11 +36,11 @@ Plataforma de simulacao de politicas publicas brasileiras. Crie propostas, simul
 | Frontend | Vue 3 (CDN) + Tailwind CSS (CDN) — sem build step |
 | Contrato | Solidity ^0.8.20 — QuadraticVote.sol |
 | LLM | OpenRouter (opcional) — apenas camada explicativa |
-| Deploy | Railway (backend) / Anyclaw (frontend alternativo) |
+| Deploy | Railway (backend) / Anyclaw (frontend) |
 
 ---
 
-## Deploy em 10 comandos
+## Rodar localmente
 
 ```bash
 git clone https://github.com/Yukio80/LAB-EPN.git
@@ -52,24 +54,41 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Acesse http://localhost:8000. O frontend e servido como static file pelo proprio FastAPI.
 
-### Railway (producao)
+---
+
+## Deploy
+
+### Railway (backend — ja no ar)
+
+O backend esta implantado em [https://lab-epn-production.up.railway.app](https://lab-epn-production.up.railway.app).
 
 ```bash
-# 1. Crie uma conta em https://railway.app
-# 2. Conecte o repositorio GitHub
-# 3. Railway detecta railway.toml automaticamente:
-#    build:  pip install -r requirements.txt
-#    start:  uvicorn app.main:app --host 0.0.0.0 --port $PORT
-# 4. Opcional: defina DATABASE_URL para PostgreSQL
-# 5. Acesse o URL gerado pelo Railway
+railway login --browserless     # autentica com codigo no terminal
+railway link --project LAB-EPN  # vincula o repositorio
+railway up                      # ou: git push (auto-deploy via GitHub)
 ```
 
-Variaveis de ambiente necessarias:
+Variaveis de ambiente configuradas:
 
-| Variavel | Obrigatoria | Descricao |
-|---|---|---|
-| `DATABASE_URL` | Nao | Padrao: SQLite local. Use `postgresql://...` para PostgreSQL |
-| `OPENROUTER_API_KEY` | Nao | Chave para LLM explicativo. Sem ela, modo deterministico puro |
+| Variavel | Valor |
+|---|---|
+| `DATABASE_URL` | `sqlite:///./lab-epn.db` |
+| `OPENROUTER_API_KEY` | vazio (modo deterministico) |
+
+O banco SQLite e efemero (resetado em restart), mas o auto-seed na inicializacao (`lifespan` em `app/main.py`) recria as 5 propostas + 2 votacoes automaticamente.
+
+### Anyclaw (frontend)
+
+```bash
+# Atualizar e publicar:
+zip -r app.zip frontend/
+ZIP_B64=$(base64 < app.zip | tr -d '\n')
+curl -X POST https://anyclaw.store/api/deploy \
+  -H "Content-Type: application/json" \
+  -d '{"app_id":"lab-epn-pangeia","zip_b64":"'$ZIP_B64'","app_type":"web_app"}'
+```
+
+Apos deploy, visite a claim URL gerada e confirme.
 
 ---
 
@@ -77,7 +96,7 @@ Variaveis de ambiente necessarias:
 
 ```
 app/
-  main.py              — FastAPI app, CORS, static mount
+  main.py              — FastAPI app, CORS, static mount, auto-seed
   database.py          — SQLAlchemy engine (DATABASE_URL via env)
   models/proposta.py   — ORM + Pydantic schemas (10 status, 17 ODS)
   routes/
@@ -92,11 +111,13 @@ app/
     pesos_ods.py       — 17 ODS versionados com pesos auditaveis
     votacao_onchain.py — Simulador de contrato QuadraticVote (dev)
 frontend/
-  index.html           — SPA Vue 3 + Tailwind (inline api)
+  index.html           — SPA Vue 3 + Tailwind (inline)
 scripts/
   seed_demo.py         — Popula banco com 5 propostas + simulacoes + votacao
 contratos/
   QuadraticVote.sol    — Votacao quadratica on-chain
+railway.toml           — Configuracao de build/deploy Railway
+Procfile               — Start command Railway
 ```
 
 ---
