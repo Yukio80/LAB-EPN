@@ -7,7 +7,7 @@
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <script>window.API_URL = 'https://82c40ea075f855d1-187-61-90-143.serveousercontent.com'</script>
+  <script>window.API_URL = 'https://de085edc7e9f09.lhr.life'</script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
@@ -17,7 +17,7 @@
     .loading { animation: spin 1s linear infinite; }
     .card-hover { transition: all .2s ease; }
     .card-hover:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -8px rgba(0,0,0,.15); }
-    .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
+    .badge { display: inline-flex; align-items: center; padding: 0.125rem 0.625rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; }
     .toast-enter-active { animation: slideIn .3s ease; }
     .toast-leave-active { animation: slideOut .3s ease; }
     @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -528,10 +528,48 @@
     </footer>
   </div>
 
-  <script type="module">
-    import api from './api.js'
+  <script>
+    const API = window.API_URL || ''
+    const FALLBACK = 'http://localhost:8765'
 
-    const { createApp, ref, computed, watch, onMounted, nextTick } = Vue
+    async function falar(url, opts) {
+      const resp = await fetch(url, opts).catch(() => null)
+      if (resp && resp.ok) return resp.json()
+      if (!url.startsWith(FALLBACK)) {
+        const fallbackUrl = FALLBACK + url.slice(API.length)
+        const resp2 = await fetch(fallbackUrl, opts).catch(() => null)
+        if (resp2 && resp2.ok) return resp2.json()
+        if (resp2) { const e = new Error('fetch failed'); e.response = resp2; throw e }
+      }
+      if (resp) { const e = new Error('fetch failed'); e.response = resp; throw e }
+      throw new Error('Failed to fetch')
+    }
+
+    const api = {
+      listar: () => falar(API + '/propostas'),
+      obter: (id) => falar(API + `/propostas/${id}`),
+      criar: (dados) => falar(API + '/propostas', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(dados) }),
+      simular: (id) => falar(API + `/propostas/${id}/simular`, { method:'POST' }),
+      publicar: (id) => falar(API + `/propostas/${id}/publicar`, { method:'POST' }),
+      votacao: {
+        listar: () => falar(API + '/votacao/propostas'),
+        votar: (id, voto, creditos) => falar(API + `/votacao/propostas/${id}/votar?voto=${voto}&creditos=${creditos}`, { method:'POST' }),
+        resultado: (id) => falar(API + `/votacao/propostas/${id}/resultado`),
+      },
+      admin: {
+        dashboard: () => falar(API + '/admin/dashboard'),
+        pesos: () => falar(API + '/admin/pesos'),
+        atualizarPesos: (ods_id, pesos, justificativa) => falar(API + '/admin/pesos', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ods_id, pesos, justificativa}) }),
+        auditoria: () => falar(API + '/admin/auditoria'),
+        pendentes: () => falar(API + '/admin/propostas/pendentes'),
+        validar: (id, decisao, parecer) => falar(API + `/admin/propostas/${id}/validar`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({decisao, parecer}) }),
+        votacoes: () => falar(API + '/admin/votacoes'),
+      }
+    }
+  </script>
+
+  <script>
+    const { createApp, ref, computed, watch, onMounted } = Vue
 
     createApp({
       setup() {
@@ -559,11 +597,11 @@
         const pesoEditForm = ref({})
         const pesoJustificativa = ref('')
         const adminTabs = [
-          {id:'dashboard', label:'📊 Painel'},
-          {id:'pesos', label:'⚖️ Pesos ODS'},
-          {id:'revisao', label:'🔍 Revisão'},
-          {id:'votacoes', label:'🗳️ Votações'},
-          {id:'auditoria', label:'📋 Auditoria'},
+          {id:'dashboard', label:'Painel'},
+          {id:'pesos', label:'Pesos ODS'},
+          {id:'revisao', label:'Revisao'},
+          {id:'votacoes', label:'Votacoes'},
+          {id:'auditoria', label:'Auditoria'},
         ]
 
         const form = ref({
@@ -646,7 +684,9 @@
         }
 
         function formatDate(d) {
-          return new Date(d + 'Z').toLocaleDateString('pt-BR')
+          if (!d) return ''
+          const dt = new Date(d.endsWith('Z') ? d : d.includes('+') || d.includes('Z') ? d : d + 'Z')
+          return dt.toLocaleDateString('pt-BR')
         }
 
         function toast(msg, type = 'info') {

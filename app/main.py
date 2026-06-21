@@ -5,15 +5,25 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.database import Base, engine
+from app.database import Base, engine, SessionLocal
 from app.routes.propostas import router as propostas_router
 from app.routes.admin import router as admin_router
 from app.routes.votacao import router as votacao_router
+from app.services.votacao_onchain import carregar_do_banco
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        from app.models.proposta import PropostaORM
+        if db.query(PropostaORM).count() == 0:
+            from scripts.seed_demo import seed
+            await seed()
+        carregar_do_banco(db)
+    finally:
+        db.close()
     yield
 
 

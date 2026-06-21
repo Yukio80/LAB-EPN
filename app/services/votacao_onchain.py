@@ -3,6 +3,7 @@ Servico de votacao on-chain via QuadraticVote.sol.
 
 Em producao: interage com contrato Solidity implantado via Web3.py.
 Em dev: simula o comportamento do contrato em memoria (hash-based).
+Com persistencia: dados salvos no banco via PropostaORM.resultado_votacao.
 """
 import hashlib
 import json
@@ -27,9 +28,57 @@ class PropostaVotacao(BaseModel):
 
 
 # ─── Simulador de contrato (dev) ────────────────────────────────
-# Em producao, substituir por chamadas Web3 ao contrato implantado.
 
 _votacoes: dict[str, PropostaVotacao] = {}
+_proposta_para_votacao: dict[str, str] = {}
+
+
+def carregar_do_banco(db):
+    from app.models.proposta import PropostaORM
+    orms = db.query(PropostaORM).filter(
+        PropostaORM.status == "em_votacao"
+    ).all()
+    for o in orms:
+        if not o.contrato_endereco:
+            continue
+        dados = (o.simulacao or {}).get("contrato", {})
+        pid = dados.get("proposta_id") or str(uuid4())
+        prop = PropostaVotacao(
+            id=pid,
+            titulo=o.titulo,
+            hash_proposta=o.simulacao.get("contrato", {}).get("hash_proposta", ""),
+            ativa=True,
+            criada_em=o.published_at or o.created_at,
+            deadline=o.published_at or o.created_at,
+        )
+        if o.resultado_votacao:
+            prop.votos_sim = o.resultado_votacao.get("votos_sim", 0)
+            prop.votos_nao = o.resultado_votacao.get("votos_nao", 0)
+            prop.creditos_sim = o.resultado_votacao.get("creditos_sim", 0)
+            prop.creditos_nao = o.resultado_votacao.get("creditos_nao", 0)
+        _votacoes[pid] = prop
+        _proposta_para_votacao[pid] = o.id
+
+
+def _salvar_resultado(proposta_id: str, prop: PropostaVotacao):
+    from app.database import SessionLocal
+    from app.models.proposta import PropostaORM
+    db = SessionLocal()
+    try:
+        pid = _proposta_para_votacao.get(proposta_id)
+        if not pid:
+            return
+        orm = db.query(PropostaORM).filter(PropostaORM.id == pid).first()
+        if orm:
+            orm.resultado_votacao = {
+                "votos_sim": prop.votos_sim,
+                "votos_nao": prop.votos_nao,
+                "creditos_sim": prop.creditos_sim,
+                "creditos_nao": prop.creditos_nao,
+            }
+            db.commit()
+    finally:
+        db.close()
 
 
 def _hash_proposta(titulo: str, descricao: str, orcamento: float) -> str:
@@ -38,10 +87,6 @@ def _hash_proposta(titulo: str, descricao: str, orcamento: float) -> str:
 
 
 async def implantar(titulo: str, descricao: str, orcamento: float, duracao_dias: int = 30) -> dict:
-    """
-    Cria uma proposta on-chain. Em producao: chama QuadraticVote.criarProposta().
-    Retorna endereco do contrato + id da proposta.
-    """
     pid = str(uuid4())
     now = datetime.now(timezone.utc)
 
@@ -79,6 +124,7 @@ async def votar(proposta_id: str, voto: bool, creditos: int) -> dict:
         prop.creditos_nao += creditos
 
     custo_eth = creditos * creditos * 0.001
+    _salvar_resultado(proposta_id, prop)
     return {
         "proposta_id": proposta_id,
         "voto": voto,

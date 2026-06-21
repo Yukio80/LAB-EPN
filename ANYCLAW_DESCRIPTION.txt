@@ -1,0 +1,1 @@
+Crie, simule e vote propostas de politicas publicas com dados reais do Brasil. O motor Pangeia calcula impacto em 5 metricas usando IBGE, PNAD e PNUD. Votacao quadratica on-chain. Sem cadastro, sem build, sem LLM necessario.

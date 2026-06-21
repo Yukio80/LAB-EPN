@@ -128,6 +128,9 @@ async def publicar_proposta(proposta_id: str, db: Session = Depends(get_db)):
         orcamento=orm.orcamento_estimado,
     )
     orm.contrato_endereco = contrato["contrato_endereco"]
+    pid = contrato["proposta_id"]
+    from app.services.votacao_onchain import _proposta_para_votacao
+    _proposta_para_votacao[pid] = proposta_id
     if orm.simulacao:
         orm.simulacao["contrato"] = contrato
 

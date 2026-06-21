@@ -1,6 +1,6 @@
 {
-  "title": "LAB-EPN + Pangeia",
-  "description": "Simulador de políticas públicas com motor de IA Pangeia. Crie, simule e vote propostas com simulação de agentes autônomos.",
+  "title": "LAB-EPN",
+  "description": "Crie, simule e vote propostas de politicas publicas com dados reais do Brasil. Motor deterministico com IBGE, 17 ODS e votacao quadratica.",
   "category": "Productivity",
   "icon": "icon.svg"
 }
