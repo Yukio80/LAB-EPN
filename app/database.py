@@ -4,7 +4,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////data/lab-epn.db")
+_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./lab-epn.db")
 
 _is_sqlite = _DATABASE_URL.startswith("sqlite")
 _connect_args = {"check_same_thread": False} if _is_sqlite else {}
